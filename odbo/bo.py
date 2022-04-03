@@ -1,4 +1,4 @@
-"""Classical (Vanila) Bayesian optimization"""
+"""Classical (Naive) Bayesian optimization"""
 
 import botorch
 import torch
