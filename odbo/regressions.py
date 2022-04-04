@@ -57,11 +57,11 @@ def GPRegression(X,
         mll.eval()
     elif optimizer == 'fit_gpytorch_torch':
         mll.train()
-        fit_gpytorch_torch(mll, options={'maxiter': 500})
+        fit_gpytorch_torch(
+            mll, options={'maxiter': 500}, track_iterations=False)
         mll.eval()
     else:
         fit_gpytorch_model(mll, optimizier=optimizer)
-
     return model
 
 

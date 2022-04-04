@@ -1,5 +1,6 @@
 import numpy as np
 import warnings
+warnings.filterwarnings("ignore")
 from pyod.models.xgbod import XGBOD as xgbod
 
 
@@ -44,7 +45,3 @@ class XGBOD(xgbod):
             from pyod.models.ocsvm import OCSVM
             from pyod.models.iforest import IForest
             self.estimator_list = [KNN(), LOF(), OCSVM(), IForest()]
-
-
-class LAMCTS():
-    pass

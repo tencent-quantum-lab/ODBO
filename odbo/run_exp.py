@@ -14,6 +14,7 @@ def bo_design(X,
               gp_method='gp_regression',
               batch_size=1,
               min_inferred_noise_level=1e-4,
+              acqfn = 'ei',
               verbose=False):
     """Run experimental design using BO
     Parameters
@@ -30,6 +31,8 @@ def bo_design(X,
         Number of next experiments to be added
     min_inferred_noise_level : float, default=1e-4
         Minimum value of added noises to kernel 
+    acqfn : str, default='ei'
+        Acqusition function used
     verbose : boolean, default=False
         Print out the details of selcted experiments
     Returns
@@ -54,9 +57,9 @@ def bo_design(X,
         model, inliers, outliers = RobustRegression(
             X_norm, Y_norm, min_inferred_noise_level=min_inferred_noise_level)
         X_norm, Y_norm = X_norm[inliers, :], Y_norm[inliers]
-        if len(inliers) != len(Y):
+        if len(inliers) != len(Y) and verbose == True:
             print(len(Y) - len(inliers), ' outliers found')
-
+        del model, inliers, outliers
     while True:
         try:
             gp_model = GPRegression(
@@ -80,16 +83,18 @@ def bo_design(X,
         X=X_norm,
         Y=Y_norm,
         batch_size=batch_size,
-        X_pending=X_pending_norm)
+        X_pending=X_pending_norm,
+        acqfn=acqfn)
     next_exp_id = []
 
-    if X_pending is not None:
+    del gp_model, X_norm, Y_norm, X, Y, X_pending
+    if X_pending_norm is not None:
         for j in range(batch_size):
-            tonext = []
-            for i in range(X_pending.shape[0]):
-                if torch.equal(X_next[j:j + 1, :].detach(),
-                               X_pending_norm[i:i + 1, :].detach()):
-                    tonext.append(i)
+            tonext = np.where(
+                np.all(
+                    X_pending_norm.detach().numpy() ==
+                    X_next[j:j + 1, :].detach().numpy(),
+                    axis=1) == True)[0]
             if len(tonext) > 1:
                 tonext = [random.choice(tonext)]
             next_exp_id.extend(tonext)
@@ -98,6 +103,7 @@ def bo_design(X,
             print("Next experiment to pick: ",
                   X_next.detach().numpy(), "Acqusition value: ",
                   acq_value.detach().numpy())
+    del X_pending_norm
 
     return X_next, acq_value, next_exp_id
 
@@ -110,6 +116,7 @@ def turbo_design(state,
                  gp_method='gp_regression',
                  batch_size=1,
                  min_inferred_noise_level=1e-4,
+                 acqfn = 'ei',
                  verbose=False):
     """Run experimental design using TuRBO
     Parameters
@@ -131,6 +138,8 @@ def turbo_design(state,
         Number of next experiments to be added
     min_inferred_noise_level : float, default=1e-4
         Minimum value of added noises to kernel 
+    acqfn : str, default='ei'
+        Acqusition function used 
     verbose : boolean, default=False
         Print out the details of selcted experiments
     Returns
@@ -155,9 +164,9 @@ def turbo_design(state,
         model, inliers, outliers = RobustRegression(
             X_norm, Y_norm, min_inferred_noise_level=min_inferred_noise_level)
         X_norm, Y_norm = X_norm[inliers, :], Y_norm[inliers]
-        if len(inliers) != len(Y):
+        if len(inliers) != len(Y) and verbose == True:
             print(len(Y) - len(inliers), ' outliers found')
-
+        del model, inliers, outliers
     while True:
         try:
             gp_model = GPRegression(
@@ -183,25 +192,26 @@ def turbo_design(state,
         Y=Y_norm,
         n_trust_regions=n_trust_regions,
         batch_size=batch_size,
-        X_pending=X_pending_norm)
+        X_pending=X_pending_norm,
+        acqfn=acqfn)
     next_exp_id = []
+    del gp_model, X_norm, Y_norm, X, Y, X_pending
 
-    if X_pending is not None:
+    if X_pending_norm is not None:
         for t in range(n_trust_regions):
             next_exp_id_m = []
-            for i in range(X_pending.shape[0]):
-                for j in range(batch_size):
-                    if torch.equal(
-                            X_next[t, j, :].detach().reshape(
-                                1, X_pending_norm.shape[1]),
-                            X_pending_norm[i:i + 1, :].detach()):
-                        next_exp_id_m.append(i)
+            for j in range(batch_size):
+                ids = np.where(
+                    np.all(
+                        X_pending_norm.detach().numpy() == X_next[t, j, :].
+                        detach().numpy().reshape(1, X_pending_norm.shape[1]),
+                        axis=1) == True)[0]
+                next_exp_id_m.extend(ids)
             next_exp_id.append(next_exp_id_m)
         if verbose == True:
             print("Next experiment to pick: ",
                   X_next.detach().numpy(), "Acqusition value: ",
                   acq_value.detach().numpy())
         next_exp_id = np.vstack(next_exp_id)
-
+    del X_pending_norm
     return X_next, acq_value, next_exp_id
-

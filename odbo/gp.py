@@ -89,11 +89,15 @@ class GP(BatchedMultiOutputGPyTorchModel, ExactGP):
             self._is_custom_likelihood = True
         ExactGP.__init__(self, train_X, train_Y, likelihood)
         self.mean_module = ConstantMean(batch_shape=self._aug_batch_shape)
+        if train_X.shape[0] <  train_X.shape[1]:
+            ard_num_dims = 1
+        else:
+            ard_num_dims = transformed_X.shape[-1] 
         if covar_module is None:
             self.covar_module = ScaleKernel(
                 MaternKernel(
                     nu=2.5,
-                    ard_num_dims=transformed_X.shape[-1],
+                    ard_num_dims=ard_num_dims,
                     batch_shape=self._aug_batch_shape,
                     lengthscale_prior=GammaPrior(3.0, 6.0),
                 ),
@@ -205,11 +209,16 @@ class StudentTGP(BatchedMultiOutputGPyTorchModel, ApproximateGP):
         ApproximateGP.__init__(self, variational_strategy)
 
         self.mean_module = ConstantMean(batch_shape=self._aug_batch_shape)
+        if train_X.shape[0] <  train_X.shape[1]:
+            ard_num_dims = 1
+        else:
+            ard_num_dims = transformed_X.shape[-1]
+
         if covar_module is None:
             self.covar_module = ScaleKernel(
                 MaternKernel(
                     nu=2.5,
-                    ard_num_dims=transformed_X.shape[-1],
+                    ard_num_dims=ard_num_dims,
                     batch_shape=self._aug_batch_shape,
                     lengthscale_prior=GammaPrior(3.0, 6.0),
                 ),

@@ -132,5 +132,15 @@ def plot_hist(X, Y=None, mode='count'):
         axs[i].set_xticklabels(labels=values[:, 0], fontsize=18)
 
 
-def plot_bo(Y, Y_std, methods=None, cmap=None):
-    pass
+def plot_bo(iters, BO_result, method=None, color=None):
+    bo, bo_err = [], []
+    initial_len = BO_result.shape[0]-iters
+    for i in range(iters):
+        bo.append(np.mean(np.max(BO_result[0:initial_len+i], axis = 0)))
+        bo_err.append(np.std(np.max(BO_result[0:initial_len+i], axis = 0)))
+    if color == None:
+        color ='C0'
+    plt.plot(np.arange(iters), bo, '-', label=method, color =color, linewidth=2)
+    plt.fill_between(np.arange(iters), np.subtract(bo, bo_err), np.add(bo,bo_err), color = color, alpha = 0.2)
+
+

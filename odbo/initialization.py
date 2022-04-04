@@ -9,7 +9,7 @@ def initial_design(X_pending,
                    verbose=True,
                    allow_abundance=False,
                    importance_method='sum',
-                   random_state=0):
+                   update_method='independent'):
     """Generate the inital set of experimentes to collect measurements to initiate BO  
     Parameters
     ----------
@@ -26,18 +26,16 @@ def initial_design(X_pending,
         If allow using the abundance scores to pick less frequent choices first
     importance_method : string, default='sum'
         The importance score computation method
-    random_state : int, default=0
-        Random seed used in this algorithm
+
     Returns
     -------
     sele_indices : List of ints
         Selected indices of the input X_pending to be 0th round experiments for BO
     """
 
-    np.random.seed(random_state)
-    if least_occurance == None:
+    if least_occurance is None:
         least_occurance = np.ones(X_pending.shape[1])
-    if choice_list == None:
+    if choice_list is None:
         choice_list = []
         for i in range(X_pending.shape[1]):
             choice_list.append(list(set(X_pending[:, i])))
@@ -45,8 +43,12 @@ def initial_design(X_pending,
     if allow_abundance:
         abundance_scores = abundance(X_pending, choice_list)
     pending_scores = np.zeros(X_pending.shape)
+    for i in range(X_pending.shape[1]):
+        ids = np.where(X_pending[:, i] == '*')[0]
+        if len(ids) != 0:
+            X_pending[ids, i] = X_pending[0, i]
     sele_indices = [0]
-    pending_indices = np.delete(range(N), sele_indices)
+    pending_indices = np.arange(1, N)
     pending_scores[sele_indices, :] = -np.inf * np.ones(
         pending_scores[sele_indices, :].shape)
     pending_scores[pending_indices, :] = compute_score(
@@ -68,7 +70,8 @@ def initial_design(X_pending,
         update_indices = np.argmax(sum_scores)
         sele_indices.append(update_indices)
         pending_scores = update_score(pending_scores,
-                                      X_pending[update_indices, :], X_pending)
+                                      X_pending[update_indices, :], X_pending,
+                                      update_method)
         if verbose == True:
             print('Current selected experiments: ', sele_indices[-1],
                   'Max pending score: ', np.max(pending_scores))
@@ -79,6 +82,7 @@ def compute_score(current_X,
                   X_pending,
                   choice_list,
                   least_occurance,
+                  sele_indices,
                   importance_method='sum'):
     """Comput scores of all the experiments in the search space
     Parameters
@@ -118,7 +122,10 @@ def compute_score(current_X,
         )
 
 
-def update_score(pending_scores, update_X, X_pending):
+def update_score(pending_scores,
+                 update_X,
+                 X_pending,
+                 update_method='independent'):
     """Update scores of all the experiments with knowing the newly selected experiments
     Parameters
     ----------
@@ -134,10 +141,21 @@ def update_score(pending_scores, update_X, X_pending):
     pending_scores : ndarray of (n_pending_samples, feature_size)
         Updated importances scores of each choice of each feature
     """
-
-    for i in range(X_pending.shape[1]):
-        pending_id_no = np.where(X_pending[:, i] == update_X[i])[0]
-        pending_scores[pending_id_no, i] = pending_scores[pending_id_no, i] - 1
+    if update_method == 'independent':
+        for i in range(X_pending.shape[1]):
+            pending_id_no = np.where(X_pending[:, i] == update_X[i])[0]
+            pending_scores[pending_id_no,
+                           i] = pending_scores[pending_id_no, i] - 1
+    elif update_method == 'correlate':
+        wild_type = X_pending[0, :]
+        diff_loc = np.where(wild_type != update_X)[0]
+        for i in range(X_pending.shape[1]):
+            for j in range(len(diff_loc)):
+                pending_id_no = np.where(
+                    np.logical_and(X_pending[:, i] == update_X[diff_loc[j]],
+                                   wild_type[i] == wild_type[diff_loc[j]]))[0]
+                pending_scores[pending_id_no,
+                               i] = pending_scores[pending_id_no, i] - 1
     return pending_scores
 
 
