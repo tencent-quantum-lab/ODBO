@@ -16,7 +16,7 @@ ODBO is written as a **maximization** algorithm to search the best experimental 
 Please first clone our repo and install using the setup.py. All the dependencies are listed in the ```requirements.txt```.
 
 ```
-git clone https://github.com/sherrylixuecheng/ODBO.git
+git clone https://github.com/tencent-quantum-lab/ODBO.git
 cd ODBO
 pip install requirements.txt (if needed)
 python setup.py install 
