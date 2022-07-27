@@ -7,7 +7,7 @@ This repository includes the codes and results for our paper:
 ODBO is written as a **maximization** algorithm to search the best experimental design with desired properties. The initial sample generators and different encodings are also included in this repo.
 
 <p align="center">
-  <a href="https://github.com/sherrylixuecheng/ODBO/figure">
+  <a href="https://github.com/tencent-quantum-lab/ODBO/figure">
     <img width=90% src="figure/Figure1_ODBO_Pipeline.png">
   </a>
 </p>
