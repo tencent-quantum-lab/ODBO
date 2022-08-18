@@ -34,3 +34,12 @@ The descriptions of files in each folder are listed in the corresponding ```READ
 ## Run a test or reproduce our work
 After installing this repo, jupyter notebooks under [examples](examples) with detailed descriptions of each could be directly run to reproduce some of our results. People could also easily change the global settings within each notebook to produce your own results. 
 
+## Please cite us as
+```
+@article{cheng2022odbo,
+  title={ODBO: Bayesian Optimization with Search Space Prescreening for Directed Protein Evolution},
+  author={Cheng, Lixue and Yang, Ziyi and Liao, Benben and Hsieh, Changyu and Zhang, Shengyu},
+  journal={arXiv preprint arXiv:2205.09548},
+  year={2022}
+}
+```
