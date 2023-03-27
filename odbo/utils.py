@@ -34,8 +34,8 @@ def normalize_data(X, Y, X_pending=None):
             test_x - X_min, X_max - X_min)
     else:
         X_mean, X_std = torch.mean(X, dim=0), torch.std(X, dim=0)
-        X_min, X_max = torch.min(X, dim=0)[0], torch.max(X, dim=0)[0]
         train_x = (X - X_mean) / X_std
+        X_min, X_max = torch.min(train_x, dim=0)[0], torch.max(train_x, dim=0)[0]
         train_x = torch.div(train_x - X_min, X_max - X_min)
         test_x = None
     stats = [X_mean, X_std, X_min, X_max]

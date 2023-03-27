@@ -12,17 +12,16 @@ class TurboState:
     batch_size: int
     length: list
     n_trust_regions: int = 1
-    length_min: float = 0.5**7
-    length_max: float = 6.4
+    length_min: float = 0.5**10
+    length_max: float = 3.2
     failure_counter: int = 0
     failure_tolerance: int = float("nan")  # Note: Post-initialized
     success_counter: int = 0
-    success_tolerance: int = 10  # Note: The original paper uses 3
+    success_tolerance: int = 3  # Note: The original paper uses 3
     best_value: float = -float("inf")
     restart_triggered: bool = False
     """TurboState class 
     """
-
     def __post_init__(self):
         if self.failure_tolerance == float("nan"):
             self.failure_tolerance = math.ceil(
@@ -32,17 +31,17 @@ class TurboState:
         self.success_counter = list(np.zeros(self.n_trust_regions))
 
 
-def update_state(state, Y_next):
+def update_state(state, Y_next, update_failure=True):
     """Update a TurboState with the optimization running
     """
     for i in range(state.n_trust_regions):
-        if max(Y_next[i, :, :]
-               ) > state.best_value :
+        if max(Y_next[i, :, :]) > state.best_value:
             state.success_counter[i] += 1
             state.failure_counter[i] = 0
         else:
             state.success_counter[i] = 0
-            state.failure_counter[i] += 1
+            if update_failure:
+                state.failure_counter[i] += 1
         if state.success_counter[
                 i] == state.success_tolerance:  # Expand trust region
             state.length[i] = min(2.0 * state.length[i], state.length_max)
@@ -50,10 +49,12 @@ def update_state(state, Y_next):
         elif state.failure_counter[
                 i] == state.failure_tolerance:  # Shrink trust region
             state.length[i] /= 2.0
-            state.failure_counter[i] = 0
+            if update_failure:
+                state.failure_counter[i] = 0
 
         state.best_value = max(state.best_value, max(Y_next.ravel()).item())
     if max(state.length) < state.length_min:
+        state.length = state.length_min*16*np.ones(len(state.length))
         state.restart_triggered = True
     return state
 
@@ -69,8 +70,8 @@ def generate_batch(
         n_candidates=None,  # Number of candidates for Thompson sampling
         num_restarts=10,
         raw_samples=512,
-        acqfn="ei",
-        **kwargs):
+        a = 0.2, 
+        acqfn="ei"):
     """Generate a set of next best experimentes by TuRBO algorithm
     Parameters
     ----------
@@ -100,8 +101,6 @@ def generate_batch(
         Number of samples for initialization. 
     acqfn : str, default="ei"
         Acqusition function choices. Must be chosen from "ei", "pi", "ucb" and "ts"
-    **kwargs : list of str
-        Options passed into BoTorch optimization function
     Returns
     -------
     X_next : pyTorch tensor with a shape of (batch_size, feature_size) of floats
@@ -144,9 +143,8 @@ def generate_batch(
                                     0.0, 1.0)
                 tr_ub = torch.clamp(x_center + weights * state.length[t] / 2.0,
                                     0.0, 1.0)
-                pert[t, :, :] = tr_lb + (
-                    tr_ub - tr_lb) * sobol.draw(n_candidates).to(
-                        dtype=dtype, device=device)
+                pert[t, :, :] = tr_lb + (tr_ub - tr_lb) * sobol.draw(
+                    n_candidates).to(dtype=dtype, device=device)
 
             # Create a perturbation mask
             prob_perturb = min(20.0 / dim, 1.0)
@@ -155,12 +153,12 @@ def generate_batch(
                     <= prob_perturb)
             ind = torch.where(mask.sum(dim=2) == 0)[0]
             mask[ind,
-                 torch.randint(0, dim - 1, size=(
-                     len(ind), ), device=device)] = 1
+                 torch.randint(0, dim -
+                               1, size=(len(ind), ), device=device)] = 1
             # Create candidate points from the perturbations and the mask
             X_cand = x_center.expand(n_trust_regions, n_candidates,
                                      dim).clone()
-            X_cand[mask] = pert[mask].double()
+            X_cand[mask] = pert[mask]
             assert X_cand.shape == (n_trust_regions, n_candidates, dim)
 
         else:
@@ -170,20 +168,22 @@ def generate_batch(
                                  dtype=dtype,
                                  device=device)
             for t in range(n_trust_regions):
-                id_choice = np.random.choice(
-                    range(X_pending.shape[0]), n_candidates, replace=False)
-                X_cand[t, :, :] = X_pending[id_choice, :].to(
-                    dtype=dtype, device=device)
+                id_choice = np.random.choice(range(X_pending.shape[0]),
+                                             n_candidates,
+                                             replace=False)
+                X_cand[t, :, :] = X_pending[id_choice, :].to(dtype=dtype,
+                                                             device=device)
 
         # Sample on the candidate points
         X_next_m = torch.zeros((n_trust_regions, batch_size, dim),
                                dtype=dtype,
                                device=device)
-        thompson_sampling = MaxPosteriorSampling(
-            model=model, replacement=False)
+        thompson_sampling = MaxPosteriorSampling(model=model,
+                                                 replacement=False)
         for t in range(n_trust_regions):
-            X_next_m[t, :, :] = thompson_sampling(
-                X_cand[t, :, :], num_samples=batch_size)
+            with torch.no_grad(): 
+                X_next_m[t, :, :] = thompson_sampling(X_cand[t, :, :],
+                                                  num_samples=batch_size)
         acq_value = None
 
     elif acqfn == "ei" or acqfn == 'pi' or acqfn == 'ucb':
@@ -198,38 +198,49 @@ def generate_batch(
                                 device=device)
         for t in range(n_trust_regions):
             if acqfn == "ei":
-                acq = acqf.monte_carlo.qExpectedImprovement(
-                    model, Y.max(), maximize=True)
+                # acq = acqf.monte_carlo.qExpectedImprovement(model,
+                #                                             Y.max(),
+                #                                             maximize=True)
+                acq = acqf.analytic.ExpectedImprovement(model,
+                                                            Y.max(),
+                                                            maximize=True)                
             elif acqfn == "pi":
                 acq = acqf.monte_carlo.qProbabilityOfImprovement(
                     model, Y.max())
             if acqfn == "ucb":
-                acq = acqf.monte_carlo.qUpperConfidenceBound(model, 0.1)
+#                acq = acqf.monte_carlo.qUpperConfidenceBound(model, 0.2)
+                acq = acqf.analytic.UpperConfidenceBound(model, a)
             tr_lb = torch.clamp(x_center - weights * state.length[t] / 2.0,
                                 0.0, 1.0)
             tr_ub = torch.clamp(x_center + weights * state.length[t] / 2.0,
                                 0.0, 1.0)
             if X_pending == None:
-                X_next_m[t, :, :], acq_value[t, :] = optimize_acqf(
-                    acq,
-                    bounds=torch.stack([tr_lb, tr_ub]),
-                    q=batch_size,
-                    num_restarts=num_restarts,
-                    raw_samples=raw_samples,
-                    **kwagrs)
+#                try:
+                    X_next_m[t, :, :], acq_value[t, :] = optimize_acqf(
+                        acq,
+                        bounds=torch.stack([tr_lb, tr_ub]),
+                        q=batch_size,
+                        num_restarts=num_restarts,
+                        raw_samples=raw_samples)
+
+                # except:
+                #     print(tr_lb, tr_ub)
+                #     X_next_m[t, :, :], acq_value[t, :] = torch.rand(
+                #     batch_size).to(dtype=dtype, device=device), torch.zeros(batch_size)
+
             else:
+                print('Dis')
                 X_diff_ub, X_diff_lb = torch.max(
-                    torch.sub(X_pending, tr_ub), 1)[0], torch.min(
-                        torch.sub(X_pending, tr_lb), 1)[0]
-                index = np.where(
-                    np.logical_and(X_diff_ub <= 0, X_diff_lb >= 0))[0]
+                    torch.sub(X_pending, tr_ub),
+                    1)[0], torch.min(torch.sub(X_pending, tr_lb), 1)[0]
+                index = np.where(np.logical_and(X_diff_ub <= 0,
+                                                X_diff_lb >= 0))[0]
                 if len(index) == 0:
                     index = np.arange(X_pending.shape[0])
                 X_next_m[t, :, :], acq_value[t, :] = optimize_acqf_discrete(
                     acq,
                     choices=X_pending[index, :],
                     q=batch_size,
-                    max_batch_size=2048,
-                    **kwargs)
+                    max_batch_size=2048)
 
     return X_next_m, acq_value
